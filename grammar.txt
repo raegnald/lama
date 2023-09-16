@@ -1,0 +1,18 @@
+
+Lama's grammar is isomorphic with the λ-calculus.
+
+Expressions
+ε = x                   symbol
+  | [x] ε               lambda
+  | ε₁ ε₂               application
+  | let x = ε₁ in ε₂    let
+  | ()                  unit
+  | n                   number when n ∈ ℤ
+
+Types
+τ = x           monotype
+  | 'x          type variable
+  | τ₁ -> τ₂    function type  
+  | unit        unit type
+
+judement = ε : τ
