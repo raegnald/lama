@@ -13,7 +13,7 @@ let rec show_expr ?(parens=false) =
   let open Printf in function
   | Sym s -> s
   | Fun (param, e) ->
-      let e' = (* Not rendering a space between function parameters *)
+      let e' = (* Not rendering a space between function parameters: "[x][y] ..." instead of "[x] [y] ..." *)
         let e'' = show_expr e in
         match e with
           | Fun _ -> e''

@@ -3,7 +3,7 @@ open Printf
 open Lama
 
 let _debug = ref begin
-  let d = try Array.exists (String.equal "debug") Sys.argv
+  let d = try Array.exists (String.equal "--debug") Sys.argv
           with Not_found -> false
   in
   Infer.debug := d;

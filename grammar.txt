@@ -14,5 +14,3 @@ Types
   | 'x          type variable
   | τ₁ -> τ₂    function type  
   | unit        unit type
-
-judement = ε : τ

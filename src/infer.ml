@@ -113,7 +113,7 @@ let print_debug_substitutions substitutions =
 (* *** *** *** *)
 
 let infer ctx e =
-  tvar_counter := -1; (* Reset the type variables *)
+  tvar_counter := -1; (* Resets the type variables every time we infer the type of an expression *)
   let t, c = generate_type_constraints ctx e in
   print_debug_constraints e t c;
   let substitutions = unify c in
