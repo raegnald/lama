@@ -3,41 +3,7 @@ let debug = ref false
 
 open Printf
 open Expr
-
-type type_ =
-  | Mono of symbol
-  | Tvar of int
-  | Fun_t of type_ * type_
-  | Unit_t
-
-type context = type_assignment list
-and type_assignment = symbol * type_
-
-type constraints = tequation list
-and tequation = type_ * type_  (* Type equation *)
-
-type substitution = type_ * type_  (* from ... to ... *)
-
-
-let show_typevar i =
-  if i < 0 then failwith "show_typevar negative typevar";
-  if i < 26 then sprintf "'%c" (char_of_int (i + 97))  (* a, b, c, d, ...*)
-            else sprintf "'t%d" (i - 25)               (* t_1, t_2, t_3, ... *)
-
-let rec show_type ?(parens=false) = function
-  | Mono t -> t
-  | Tvar tv -> show_typevar tv
-  | Fun_t (a, b) ->
-    if parens
-      then sprintf "(%s -> %s)" (show_type ~parens:true a) (show_type b)
-      else sprintf "%s -> %s" (show_type ~parens:true a) (show_type b)
-  | Unit_t -> "unit"
-
-let show_constraints (constraints : constraints) =
-  let show_constraint (t1, t2) = sprintf "\t%s = %s\n" (show_type t1) (show_type t2) in
-  List.(map show_constraint constraints |> fold_left (^) "\n")
-let show_substitutions : substitution list -> string = show_constraints
-
+open Types
 
 let bool_t = Mono "bool"
 let int_t = Mono "int"
@@ -52,60 +18,67 @@ let fresh_tvar : symbol -> type_assignment =
 let fresh_type_variable () = snd (fresh_tvar "dummy")
 
 
-let[@warning "-8"] rec occurs (Tvar tv) = function
+let rec occurs tv = function
   | Tvar tv' -> tv' = tv
-  | Fun_t (a, b) -> a = (Tvar tv) || occurs (Tvar tv) b
+  | Fun_t (a, b) -> occurs tv a || occurs tv b
   | _ -> false
 
-let print_subst t a b = printf "\t(%s){%s / %s}\n" (show_type t) (show_type b) (show_type a)
+
+let substitute_tvar tv x = function
+  | Tvar tv', u when tv' = tv -> (u, x)
+  | u, Tvar tv' when tv' = tv -> (u, x)
+  | eq -> eq
 
 
-let rec apply_substitution_type (sub : substitution list) (t : type_) : type_ =
-  match t with
-  | Mono x -> Mono x
-  | Tvar i -> apply_substitution_type_variable sub i
-  | Fun_t (t1, t2) ->
-    let t1' = apply_substitution_type sub t1 in
-    let t2' = apply_substitution_type sub t2 in
-    Fun_t (t1', t2')
-  | Unit_t -> Unit_t
-
-and apply_substitution_type_variable (sub : substitution list) (i : int) : type_ =
-  match find_substitution sub i with
-  | None -> Tvar i
-  | Some (_, t) -> apply_substitution_type sub t
-
-and find_substitution (sub : substitution list) (i : int) : substitution option =
-  match sub with
-  | [] -> None
-  | (t1, t2) :: rest ->
-    if t1 = Tvar i then Some (t1, t2)
-    else find_substitution rest i
-
-let apply_substitution_context (sub : substitution list) (ctx : context) : context =
-  List.map (fun (x, t) -> (x, apply_substitution_type sub t)) ctx
-
-let apply_substitution_constraints (sub : substitution list) (eqs : constraints) : constraints =
-  List.map (fun (t1, t2) -> (apply_substitution_type sub t1, apply_substitution_type sub t2)) eqs
+let rec substitute_t a b = function
+  | Fun_t (x, y) ->
+      if !debug then printf "\t Function:\n";
+      print_subst x a b; print_subst y a b;
+      Fun_t (substitute_t a b x, substitute_t a b y)
+  | t when a = t ->
+      print_subst t a b;
+      b
+  | t -> t
 
 
-let rec unify (eqs : constraints) : substitution list =
-  match eqs with
+let rec substitute equations t : type_ =
+  if !debug then printf "--- %s and constraints %s---\n" (show_type t) (show_teqs equations);
+  match equations with
+  | [] -> t
+  | (l, r) :: rest when l = r ->
+      substitute rest t
+  | (Fun_t (a, b), Fun_t (c, d)) :: rest ->
+      if !debug then print_endline "\tSubst. two funs\n\n";
+      let equations' = (a, c) :: (b, d) :: rest in
+      substitute equations' t
+  | (Tvar tv, x) :: rest | (x, Tvar tv) :: rest ->
+      if !debug then  print_endline "\tOne side is a tvar\n\n";
+      if occurs tv x then
+        failwith (sprintf "Type variable %s occurs inside the type %s" (show_typevar tv) (show_type x));
+      let rest' = List.map (substitute_tvar tv x) rest
+      and t' = substitute_t (Tvar tv) x t in
+      substitute rest' t'
+  | (l, r) :: rest ->
+      let t' = substitute_t l r t in
+      substitute rest t'
+
+
+let rec unify : tequation list -> tequation list = function
   | [] -> []
   | (t1, t2) :: rest ->
-    if t1 = t2 then unify rest
-    else
       match (t1, t2) with
-      | (Tvar _, _) | (_, Tvar _) -> (t1, t2) :: unify rest
-      | (Fun_t (a1, r1), Fun_t (a2, r2)) ->
-        unify ((a1, a2) :: (r1, r2) :: rest)
-      | _ -> failwith "Type mismatch"
+        | _, _ when t1 = t2 -> unify rest
+        | (Tvar _, _) | (_, Tvar _) -> (t1, t2) :: unify rest
+        | (Fun_t (a1, r1), Fun_t (a2, r2)) ->
+            unify ((a1, a2) :: (r1, r2) :: rest)
+        | _ -> failwith (sprintf "Type mismatch between %s and %s" (show_type t1) (show_type t2))
 
 let rec generate_type_constraints (ctx : context) = function
   | Int _ -> int_t, []
 
-  | Sym s -> List.assoc s ctx, []
-  
+  | Sym s ->
+      (try  List.assoc s ctx, [] with Not_found -> failwith (sprintf "Unbound symbol %s" s))
+
   | Fun (x, e') ->
       let t1 = fresh_tvar x in
       let ctx' = t1::ctx in
@@ -131,11 +104,11 @@ let rec generate_type_constraints (ctx : context) = function
 (* *** Debugging functions *** *)
 let print_debug_constraints e t c =
   if !debug then printf "\t%s : %s\n"  (show_expr e) (show_type t);
-  if !debug && List.length c > 0 then show_constraints c |> printf "Constraints: {%s}\n"
+  if !debug && List.length c > 0 then show_teqs c |> printf "Constraints: {%s}\n"
 
 let print_debug_substitutions substitutions =
   if !debug then
-    let s = show_substitutions substitutions in
+    let s = show_teqs substitutions in
     printf "Substitutions: {%s}\n" s
 (* *** *** *** *)
 
@@ -145,4 +118,6 @@ let infer ctx e =
   print_debug_constraints e t c;
   let substitutions = unify c in
   print_debug_substitutions substitutions;
-  apply_substitution_type substitutions t
+  let t' = substitute substitutions t in
+  if !debug then printf "Finally: %s\n" (show_type t');
+  t'
