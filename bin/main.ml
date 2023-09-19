@@ -6,6 +6,7 @@ let _debug = ref begin
   let d = try Array.exists (String.equal "--debug") Sys.argv
           with Not_found -> false
   in
+  if d then print_endline "Debug mode is ON";
   Infer.debug := d;
   Types.debug := d;
   d

@@ -2,10 +2,3 @@ Programs that are erroneously inferred
 
 [c z] if c 1 z  : bool → α → α
                 : bool → int → int    when it should be
-
-[a a] a : α → β → β
-            Should it typecheck?
-            Should the second `a` shadow the first?
-            Note: In OCaml is valid to do
-                        let f x x = x
-                      ∴ val f : α → β → β

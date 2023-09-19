@@ -18,12 +18,17 @@ type tequation = type_ * type_  (* Type equation *)
 
 
 let show_typevar i =
+  let subindex n =
+    let n' = Bytes.of_string (string_of_int n)
+    and f = function '0' -> "₀" | '1' -> "₁" | '2' -> "₂" | '3' -> "₃" | '4' -> "₄" | '5' -> "₅" | '6' -> "₆" | '7' -> "₇" | '8' -> "₈" | '9' -> "₉" | c -> String.make 1 c in
+    Bytes.fold_left (fun acc c -> acc ^ f c) "" n'
+  in
   let greek = [| "α"; "β"; "γ"; "δ"; "ε"; "ζ"; "η"; "θ"; "ι"; "κ"; "λ"; "μ"; "ν"; "ξ"; "ο"; "π"; "ρ"; "σ"; "τ"; "υ"; "φ"; "χ"; "ψ"; "ω" |]
   and greek_len = 24 in
-  if i < 0 then failwith "show_typevar negative typevar";
+  if i < 0 then failwith "show_typevar: negative typevar";
   if i < greek_len
-    then greek.(i) (* sprintf "'%c" (char_of_int (i + 97)) *)  (* a, b, c, d, ...*)
-    else sprintf "τ%d" (i - greek_len)               (* t_1, t_2, t_3, ... *)
+    then greek.(i)                         (* α, β, γ, ... *)
+    else "τ" ^ (subindex (i - greek_len))  (* τ₁, τ₂, τ₃, ... *)
 
 let rec show_type ?(parens=false) = function
   | Mono t -> t
